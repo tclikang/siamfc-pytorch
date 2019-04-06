@@ -11,12 +11,13 @@ from collections import namedtuple
 from torch.optim.lr_scheduler import ExponentialLR
 
 from got10k.trackers import Tracker
-
+from parameters import param
 
 class SiamFC(nn.Module):
 
     def __init__(self):
         super(SiamFC, self).__init__()
+        self.para = param()
         self.feature = nn.Sequential(
             # conv1
             nn.Conv2d(3, 96, 11, 2),
@@ -38,6 +39,7 @@ class SiamFC(nn.Module):
             nn.ReLU(inplace=True),
             # conv5
             nn.Conv2d(384, 256, 3, 1, groups=2))
+        self.deconv = nn.Conv2d(256 * self.para.prior_frames_num, 256, 1, 1)  # 用于将堆叠后的特征对齐
         self._initialize_weights()
 
     def forward(self, z, x):
