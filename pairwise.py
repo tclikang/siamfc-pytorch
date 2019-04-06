@@ -5,6 +5,8 @@ from collections import namedtuple
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose, CenterCrop, RandomCrop, ToTensor
 from PIL import Image, ImageStat, ImageOps
+import random
+from parameters import param
 
 
 class RandomStretch(object):
@@ -61,21 +63,36 @@ class Pairwise(Dataset):
         return namedtuple('GenericDict', cfg.keys())(**cfg)
 
     def __getitem__(self, index):
-        index = self.indices[index % len(self.seq_dataset)]
-        img_files, anno = self.seq_dataset[index]
-        rand_z, rand_x = self._sample_pair(len(img_files))
+        index = self.indices[index % len(self.seq_dataset)]  # 选择一个序列
+        img_files, anno = self.seq_dataset[index]  # 获取所有的图片文件,和对应的位置信息
+        # rand_z, rand_x = self._sample_pair(len(img_files))  #
 
-        exemplar_image = Image.open(img_files[rand_z])
-        instance_image = Image.open(img_files[rand_x])
-        exemplar_image = self._crop_and_resize(exemplar_image, anno[rand_z])
+        rand_z_seq, rand_x = self.lk_sample_seq_pair(len(img_files), param.prior_frames_num)
+        exemplar_images = []
+        for i in range(len(rand_z_seq)):
+            temp = Image.open(img_files[rand_z_seq[i]])  # 读取z的图像
+            temp = self._crop_and_resize(temp, anno[rand_z_seq[i]])  # 这里的裁剪都是255大小的,经过transform_z之后变成127
+            temp = 255.0 * self.transform_z(temp)
+            exemplar_images.append(temp)
+        instance_image = Image.open(img_files[rand_x])  # 读取x的图像
+        # exemplar_image  = self._crop_and_resize(exemplar_image, anno[rand_z])
         instance_image = self._crop_and_resize(instance_image, anno[rand_x])
-        exemplar_image = 255.0 * self.transform_z(exemplar_image)
-        instance_image = 255.0 * self.transform_x(instance_image)
+        # exemplar_image  = 255.0 * self.transform_z(exemplar_image)  # 这里永远是127大小的图片
+        instance_image_z_target = 255.0 * self.transform_z(instance_image)  # 用于特征的loss
+        instance_image_search = 255.0 * self.transform_x(instance_image)
 
-        return exemplar_image, instance_image
+        return exemplar_images, instance_image_z_target, instance_image_search
 
     def __len__(self):
         return self.cfg.pairs_per_seq * len(self.seq_dataset)
+
+    # vid_len表示视频的长度, prior_sample_len表示需要用多少样本去预测下一帧的值
+    def lk_sample_seq_pair(self, vid_len, prior_samples_len):
+        assert vid_len > (prior_samples_len + 1)
+        start_frame = random.randint(0, vid_len - (prior_samples_len + 1) - 1)  # 下标从0开始的那种
+        rand_z_seq = list(range(start_frame, start_frame + prior_samples_len))
+        rand_x = start_frame + prior_samples_len + 1
+        return rand_z_seq, rand_x
 
     def _sample_pair(self, n):
         assert n > 0
