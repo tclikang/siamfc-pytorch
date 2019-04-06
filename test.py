@@ -7,7 +7,7 @@ from siamfc import TrackerSiamFC
 
 if __name__ == '__main__':
     # setup tracker
-    net_path = 'pretrained/siamfc/model.pth'
+    net_path = '/home/fanfu/PycharmProjects/siamfc-pytorch/net_model/model.pth'
     tracker = TrackerSiamFC(net_path=net_path)
 
     # setup experiments
