@@ -42,20 +42,28 @@ class SiamFC(nn.Module):
         self.deconv = nn.Conv2d(256 * self.para.prior_frames_num, 256, 1, 1)  # 用于将堆叠后的特征对齐
         self._initialize_weights()
 
-    def forward(self, z, x):
-        z = self.feature(z)
-        x = self.feature(x)
+    def forward(self, z_6_6_256, x_6_6_256, x22_22_256):
+        z_feat_cat = None
+        for z in z_6_6_256:
+            z_feat = self.feature(z.to(self.device))
+            if z_feat_cat is None:
+                z_feat_cat = z_feat
+            else:
+                z_feat_cat = torch.cat((z_feat_cat, z_feat), 1)
+
+        z_feat_deconv = self.deconv(z_feat_cat)  # 6 6 256
+        x_target_feat = self.feature(x_6_6_256.to(self.device))  # 6  6  256
+        x_search_feat = self.feature(x22_22_256.to(self.device))  # 22 22 256
 
         # fast cross correlation
-        n, c, h, w = x.size()
-        x = x.view(1, n * c, h, w)
-        out = F.conv2d(x, z, groups=n)
+        n, c, h, w = x_search_feat.size()
+        x = x_search_feat.view(1, n * c, h, w)
+        out = F.conv2d(x, z_feat_deconv, groups=n)
         out = out.view(n, 1, out.size(-2), out.size(-1))
 
         # adjust the scale of responses
-        out = 0.001 * out + 0.0
-
-        return out
+        response17 = 0.001 * out + 0.0
+        return z_feat_deconv, x_target_feat, response17
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -88,7 +96,7 @@ class TrackerSiamFC(Tracker):
 
         # setup optimizer
         self.optimizer = optim.SGD(
-            self.net.parameters(),
+            self.net.deconv.parameters(),
             lr=self.cfg.initial_lr,
             weight_decay=self.cfg.weight_decay,
             momentum=self.cfg.momentum)
@@ -236,11 +244,13 @@ class TrackerSiamFC(Tracker):
         else:
             self.net.eval()
 
-        z = batch[0].to(self.device)
-        x = batch[1].to(self.device)
+        z_seq = batch[0]    # 取出z的13个序列
+        x_target = batch[1] # 取出x 的 6*6*256的序列
+        x_search = batch[2]
 
         with torch.set_grad_enabled(backward):
-            responses = self.net(z, x)
+            # responses = self.net(z, x)
+            z_deconv, x_target_feat, response17 = self.net(z_seq, x_target, x_search)
             labels, weights = self._create_labels(responses.size())
             loss = F.binary_cross_entropy_with_logits(
                 responses, labels, weight=weights, size_average=True)
