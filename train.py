@@ -15,7 +15,7 @@ if __name__ == '__main__':
     name = 'GOT-10k'
     assert name in ['VID', 'GOT-10k']
     if name == 'GOT-10k':
-        root_dir = 'data/GOT-10k'
+        root_dir = '/home/fanfu/data/GOT-10k'
         seq_dataset = GOT10k(root_dir, subset='train')
     elif name == 'VID':
         root_dir = 'data/ILSVRC'
