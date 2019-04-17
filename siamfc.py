@@ -12,6 +12,7 @@ from torch.optim.lr_scheduler import ExponentialLR
 
 from got10k.trackers import Tracker
 from parameters import param
+from imageprocess import showbb
 
 class SiamFC(nn.Module):
 
@@ -39,7 +40,7 @@ class SiamFC(nn.Module):
             nn.ReLU(inplace=True),
             # conv5
             nn.Conv2d(384, 256, 3, 1, groups=2))
-        self.deconv = nn.Conv2d(256 * self.para.prior_frames_num, 256, 1, 1)  # 用于将堆叠后的特征对齐
+        # self.deconv = nn.Conv2d(256 * self.para.prior_frames_num, 256, 1, 1)  # 用于将堆叠后的特征对齐
         self._initialize_weights()
 
     def forward(self, z_6_6_256, x_6_6_256, x22_22_256):
@@ -96,7 +97,7 @@ class TrackerSiamFC(Tracker):
 
         # setup optimizer
         self.optimizer = optim.SGD(
-            self.net.deconv.parameters(),
+            self.net.parameters(),
             lr=self.cfg.initial_lr,
             weight_decay=self.cfg.weight_decay,
             momentum=self.cfg.momentum)
@@ -177,6 +178,7 @@ class TrackerSiamFC(Tracker):
             self.kernel = self.net.feature(exemplar_image)
 
     def update(self, image):
+        img_to_show = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)  # 这个是为了用cv2显示用的,并不影响跟踪个结果
         image = np.asarray(image)
 
         # search images
@@ -234,6 +236,7 @@ class TrackerSiamFC(Tracker):
             self.center[0] + 1 - (self.target_sz[0] - 1) / 2,
             self.target_sz[1], self.target_sz[0]])
 
+        # showbb(img_to_show, box)
         return box
 
     def step(self, batch, backward=True, update_lr=False):
